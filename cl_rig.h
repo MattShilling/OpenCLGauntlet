@@ -5,26 +5,45 @@
 
 #include <string>
 
-#define ASSERT(X)         \
-    do {                  \
-        if ((X) == false) \
-            return false; \
+#define ASSERT(X)                                  \
+    do {                                           \
+        if ((X) == false) {                        \
+            fprintf(stderr,                        \
+                    "[%s:%d] -> (%s) is false.\n", \
+                    __FILE__,                      \
+                    __LINE__,                      \
+                    #X);                           \
+            return false;                          \
+        }                                          \
     } while (false);
 
-#define CHECK_CL(X, ...)          \
-    if (X != CL_SUCCESS) {        \
-        fprintf(stderr,           \
-                "At %s:%d -> %s", \
-                __FILE__,         \
-                __LINE__,         \
-                __VA_ARGS__);     \
-        return false;             \
+#define ASSERT_MSG(X, M)                        \
+    do {                                        \
+        if ((X) == false) {                     \
+            fprintf(stderr,                     \
+                    "[%s:%d] -> (%s) is false." \
+                    "\n\t\t\\-> %s\n",          \
+                    __FILE__,                   \
+                    __LINE__,                   \
+                    #X,                         \
+                    M);                         \
+            return false;                       \
+        }                                       \
+    } while (false);
+
+#define CHECK_CL(X, ...)           \
+    if (X != CL_SUCCESS) {         \
+        fprintf(stderr,            \
+                "[%s:%d] -> %s\n", \
+                __FILE__,          \
+                __LINE__,          \
+                __VA_ARGS__);      \
+        return false;              \
     }
 
 class OpenCL {
   public:
-    OpenCL(const char *program_path)
-        : program_path_(program_path), initialized_(false) {}
+    OpenCL() : initialized_(false) {}
 
     ~OpenCL() {
         clReleaseKernel(kernel_);
@@ -34,7 +53,8 @@ class OpenCL {
 
     bool Init();
 
-    bool CreateBuffer(cl_mem *mem, size_t data_size);
+    bool CreateReadBuffer(cl_mem *mem, size_t data_size);
+    bool CreateWriteBuffer(cl_mem *mem, size_t data_size);
 
     bool EnqueueWriteBuffer(cl_mem d,
                             size_t data_size,
@@ -44,9 +64,12 @@ class OpenCL {
     bool Wait();
 
     // Step 7: Read the kernel code from a file.
+    bool AddProgramFile(const char *);
     bool CreateProgram();
+    bool CreateProgram(const std::string &source);
 
-    bool BuildProgram(const std::string &options);
+    bool BuildProgram(const std::string &options,
+                      const std::string &k_name);
 
     bool SetKernelArg(cl_uint arg_index,
                       size_t arg_size,

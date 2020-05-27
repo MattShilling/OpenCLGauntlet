@@ -6,16 +6,6 @@
 #include "printinfo.h"
 
 bool OpenCL::Init() {
-    ASSERT(program_path_ != nullptr);
-
-    fp_ = fopen(program_path_, "r");
-    if (fp_ == nullptr) {
-        fprintf(stderr,
-                "Cannot open OpenCL source file '%s'\n",
-                program_path_);
-        return false;
-    }
-
     // Step 1: Get the platform id and the device id.
     SelectOpenCLDevice(&platform_, &device_);
 
@@ -36,12 +26,35 @@ bool OpenCL::Init() {
     return true;
 }
 
-bool OpenCL::CreateBuffer(cl_mem *mem, size_t data_size) {
+bool OpenCL::AddProgramFile(const char *program_path) {
+    fp_ = fopen(program_path, "r");
+    if (fp_ == nullptr) {
+        fprintf(stderr,
+                "Cannot open OpenCL source file '%s'\n",
+                program_path);
+        return false;
+    }
+    return true;
+}
+
+bool OpenCL::CreateReadBuffer(cl_mem *mem, size_t data_size) {
     ASSERT(context_ != nullptr);
     ASSERT(mem != nullptr);
     // Step 5: Allocate the device memory buffers.
     *mem = clCreateBuffer(
         context_, CL_MEM_READ_ONLY, data_size, NULL, &status_);
+
+    CHECK_CL(status_, "clCreateBuffer failed\n");
+
+    return true;
+}
+
+bool OpenCL::CreateWriteBuffer(cl_mem *mem, size_t data_size) {
+    ASSERT(context_ != nullptr);
+    ASSERT(mem != nullptr);
+    // Step 5: Allocate the device memory buffers.
+    *mem = clCreateBuffer(
+        context_, CL_MEM_WRITE_ONLY, data_size, NULL, &status_);
 
     CHECK_CL(status_, "clCreateBuffer failed\n");
 
@@ -85,6 +98,8 @@ bool OpenCL::Wait() {
 
 // Step 7: Read the kernel code from a file.
 bool OpenCL::CreateProgram() {
+    ASSERT(context_ != nullptr);
+
     fseek(fp_, 0, SEEK_END);
     size_t sz = ftell(fp_);
     rewind(fp_);
@@ -113,7 +128,23 @@ bool OpenCL::CreateProgram() {
     return true;
 }
 
-bool OpenCL::BuildProgram(const std::string &options) {
+// Step 7: Read the kernel code from a file.
+bool OpenCL::CreateProgram(const std::string &source) {
+    ASSERT(context_ != nullptr);
+
+    // Create the text for the kernel program.
+    const char *strings[1] = {source.c_str()};
+
+    program_ = clCreateProgramWithSource(
+        context_, 1, (const char **)strings, NULL, &status_);
+
+    CHECK_CL(status_, "clCreateProgramWithSource failed\n");
+
+    return true;
+}
+
+bool OpenCL::BuildProgram(const std::string &options,
+                          const std::string &k_name) {
     ASSERT(program_ != nullptr);
     ASSERT(device_ != nullptr);
 
@@ -141,7 +172,7 @@ bool OpenCL::BuildProgram(const std::string &options) {
     }
 
     // 9. create the kernel object:
-    kernel_ = clCreateKernel(program_, "ArrayMult", &status_);
+    kernel_ = clCreateKernel(program_, k_name.c_str(), &status_);
     CHECK_CL(status_, "clCreateKernel failed\n");
 
     return true;
