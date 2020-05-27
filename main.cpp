@@ -1,9 +1,7 @@
 #include <cstdio>
 #include <cmath>
-#include <cstring>
 #include <string>
 #include <cstdlib>
-#include <unistd.h>
 #include <omp.h>
 #include <iostream>
 
@@ -11,6 +9,7 @@
 
 #include "printinfo.h"
 #include "cl_rig.h"
+#include "auto_gen.h"
 
 #ifndef NMB
 #define NMB 64
@@ -29,115 +28,6 @@ const float TOL = 0.0001f;
 const double kBillion = 1000000000.0;
 
 int LookAtTheBits(float);
-
-class KernelBuilder {
-  public:
-    KernelBuilder(std::string build_string) {
-        std::string op_str = "\t";
-        std::string prm_str = "";
-        char var = 'A';
-        bool use_reduction = false;
-
-        auto c2s = [](char c) { return std::string(1, c); };
-
-        if (build_string[1] == ':') {
-            // We want a reduction!
-            if (build_string[2] == '=') {
-                use_reduction = true;
-            }
-            op_str += "rdc[t_num] = ";
-            prm_str += "local float *rdc,\n";
-            good_build_ = true;
-        } else if (build_string[1] == '=') {
-            // Just a regular assignment, no reduction.
-            use_reduction = false;
-            op_str += c2s(var) + "[gid] = ";
-            prm_str += "global float *" + c2s(var) + ",\n";
-            var++;
-            good_build_ = true;
-        } else {
-            fprintf(stderr, "Build string: Wrong format.\n");
-            good_build_ = false;
-        }
-
-        auto find_add = [](std::string s) {
-            return s.find("+") != std::string::npos;
-        };
-
-        auto find_mlt = [](std::string s) {
-            return s.find("*") != std::string::npos;
-        };
-
-        auto p_line = [](std::string s) {
-            return "\t\t     global const float *" + s;
-        };
-
-        size_t pos = 0;
-        std::string &s = build_string;
-        while (find_add(s) || find_mlt(s)) {
-            if (s.find("+") < s.find("*")) {
-                // Found an add operation.
-                pos = s.find("+");
-                s.erase(0, pos + 1);
-                op_str += c2s(var) + "[gid] + ";
-                prm_str += p_line(c2s(var)) + ",\n";
-                var++;
-            } else if (s.find("*") < s.find("+")) {
-                // Found a multiply operation.
-                pos = s.find("*");
-                s.erase(0, pos + 1);
-                op_str += c2s(var) + "[gid] * ";
-                prm_str += p_line(c2s(var)) + ",\n";
-                var++;
-            }
-        }
-
-        // Add the final parameter string.
-        prm_str += p_line(c2s(var)) + ") {\n";
-
-        // Add the last operation variable.
-        op_str += c2s(var) + "[gid];\n";
-
-        std::string fcn_str = "kernel void auto_gen(";
-        std::string make_gid = "\tint gid = get_global_id(0);\n";
-        std::string rdc_mask = "";
-        if (use_reduction) {
-            make_gid += "\tint n_items = get_local_size(0);\n";
-            make_gid += "\tint t_num = get_local_id(0);\n";
-            make_gid += "\tint work_group_num = get_group_id(0);\n";
-        
-            rdc_mask += "for (int ofst=1; ofst<n_items; ofst*=2) {\n"
-                        "\tint msk=2*ofst-1;\n"
-                        "\tbarrier(CLK_LOCAL_MEM_FENCE);\n"
-                        "\tif ((t_num & msk)==0) {\n"
-                        "\t\trdc[t_num]+=rdc"
-        }
-        source_code_ = fcn_str + prm_str + make_gid +
-                       op_str + rdc_mask + "}";
-
-        num_vars_ = static_cast<size_t>((var - 'A') + 1);
-    }
-
-    bool GoodBuild() {
-        if (good_build_) {
-            ASSERT_MSG(num_vars_ > 1,
-                       "You need more than 1 variable!");
-            return true;
-        }
-        return false;
-    }
-
-    std::string GetSourceCode() { return source_code_; }
-
-    size_t GetNumVars() { return num_vars_; }
-
-    std::string GetKernelName() { return "auto_gen"; }
-
-  private:
-    std::string source_code_;
-    size_t num_vars_;
-    bool good_build_;
-};
 
 int main(int argc, char *argv[]) {
 
@@ -165,35 +55,51 @@ int main(int argc, char *argv[]) {
     size_t num_work_groups = num_elements / local_size;
 
     // Here we will generate our kernel code from the provided
-    // build string.
+    // build string. Thanks, AutoGen!
     std::cout << "Generating kernel code..." << std::endl;
     std::string build_string(argv[1]);
-    KernelBuilder kb(build_string);
+    AutoGen ag(build_string);
 
     // Check to make sure we didn't run into any generation
     // errors.
-    ASSERT_MSG(kb.GoodBuild(),
+    ASSERT_MSG(ag.GoodBuild(),
                "Bad auto generation of OpenCL code!");
 
-    // Output the
-    std::cout << "Generated:\n" << kb.GetSourceCode() << "\n"
+    // Output the code because AutoGen makes it nice and pretty
+    // for us. Also useful if we want to copy it from the
+    // terminal or captured output.
+    std::cout << "Generated:\n" << ag.GetSourceCode() << "\n"
               << std::endl;
-    ASSERT_MSG(!true, "TEST");
+
     // Create dynamic memory based on the number of variables
     // needed, which is indicated to us by our KernelBuilder.
-    size_t num_vars = kb.GetNumVars();
+    size_t num_vars = ag.GetNumVars();
     float **host_mem = new float *[num_vars];
     cl_mem *device_mem = new cl_mem[num_vars];
     // Create the second dimension.
     for (auto i = 0; i < num_vars; i++) {
+        if (ag.UseReduction()) {
+            // If we are using reduction.
+            if (i == 0) {
+                // The first variable should always contain
+                // `number_work_groups` elements because
+                // that is what each work group will be
+                // reducing in to.
+                host_mem[i] = new float[num_work_groups];
+                continue;
+            }
+        }
         host_mem[i] = new float[num_elements];
     }
 
     // Fill the host memory buffers.
+    // TODO: Now that we have autogenerated kernals, we should
+    // find a way to take advantage of this. Pull data from
+    // outside source?
     for (auto i = 0; i < num_vars - 1; i++) {
         for (auto j = 0; j < num_elements; j++) {
             host_mem[i + 1][j] =
-                static_cast<float>(sqrt(static_cast<double>(i)));
+                static_cast<float>(sqrt(static_cast<double>(j)));
         }
     }
 
@@ -202,9 +108,18 @@ int main(int argc, char *argv[]) {
     OpenCL cl;
     ASSERT(cl.Init());
 
-    // Allocate the device memory buffers.
-    ASSERT(cl.CreateWriteBuffer(&(device_mem[0]), data_sz));
-    ASSERT(cl.CreateWriteBuffer(&(device_mem[0]), data_sz));
+    // Allocate the device memory buffers for writing.
+    if (ag.UseReduction()) {
+        // As noted before, we need to create a differently sized
+        // buffer for the variable we reduce into.
+        size_t a_sz = num_work_groups * sizeof(float);
+        ASSERT(cl.CreateWriteBuffer(&(device_mem[0]), a_sz));
+    } else {
+        ASSERT(cl.CreateWriteBuffer(&(device_mem[0]), data_sz));
+    }
+
+    // This for loop will skip the first device memory array.
+    // The rest of the arrays need to be set to read.
     for (auto i = 0; i < num_vars - 1; i++) {
         ASSERT(
             cl.CreateReadBuffer(&(device_mem[i + 1]), data_sz));
@@ -217,19 +132,31 @@ int main(int argc, char *argv[]) {
             device_mem[i + 1], data_sz, host_mem[i + 1]));
     }
 
+    // Wait for our buffers to finish being created.
     ASSERT(cl.Wait());
 
     // Compile and link the kernel code.
-    ASSERT(cl.CreateProgram(kb.GetSourceCode()));
+    ASSERT(cl.CreateProgram(ag.GetSourceCode()));
     std::string options = "";
-    ASSERT(cl.BuildProgram(options, kb.GetKernelName()));
+    ASSERT(cl.BuildProgram(options, ag.GetKernelName()));
 
     // Setup the arguments to the kernel object:
-    for (auto i = 0; i < num_vars; i++) {
+    size_t offset = 0;
+    if (ag.UseReduction()) {
+        // We need to allocate the local variable in the kernel.
         ASSERT(cl.SetKernelArg(
-            i, sizeof(cl_mem), &(device_mem[i])));
+            0, LOCAL_SIZE * sizeof(float), nullptr));
+        offset++;
+    }
+    // This for loop will skip the first kernal argument (0) if
+    // we are using reduction. Otherwise, create kernel
+    // arguments as usual.
+    for (auto i = offset; i < num_vars + offset; i++) {
+        ASSERT(cl.SetKernelArg(
+            i, sizeof(cl_mem), &(device_mem[i - offset])));
     }
 
+    // Setting work sizes.
     size_t globalWorkSize[3] = {num_elements, 1, 1};
     size_t localWorkSize[3] = {local_size, 1, 1};
 
@@ -241,6 +168,7 @@ int main(int argc, char *argv[]) {
     cl.GetCommandQueue(&cmd_queue);
     cl.GetKernel(&kernel);
 
+    // Init and start the timer.
     double time0;
     time0 = omp_get_wtime();
 
@@ -254,12 +182,21 @@ int main(int argc, char *argv[]) {
                                     0,
                                     NULL,
                                     NULL);
+
+    // Check for any failures. Fingers crossed.
     CHECK_CL(status, "clEnqueueNDRangeKernel failed.\n");
     ASSERT(cl.Wait());
+
+    // Stop timer.
     double time1 = omp_get_wtime();
 
     // Read the results buffer back from the device to the
     // host.
+    if (ag.UseReduction()) {
+        // We need to alter the size of the data we read
+        // back if we are using reduction methods.
+        data_sz = num_work_groups * sizeof(float);
+    }
     status = clEnqueueReadBuffer(cmd_queue,
                                  device_mem[0],
                                  CL_TRUE,
@@ -269,9 +206,19 @@ int main(int argc, char *argv[]) {
                                  0,
                                  NULL,
                                  NULL);
-
     CHECK_CL(status, "clEnqueueReadBuffer failed.\n");
+    ASSERT(cl.Wait());
 
+    // Check our reduction sum if needed.
+    if (ag.UseReduction()) {
+        float sum = 0;
+        for (int i = 0; i < num_work_groups; i++) {
+            sum += host_mem[0][i];
+        }
+        std::cout << "Reduction Sum = " << sum << std::endl;
+    }
+
+    // Print out the statistics for the run.
     fprintf(stderr,
             "%8d\t%4d\t%10d\t%10.3lf GigaMultsPerSecond\n",
             nmb,
@@ -284,7 +231,6 @@ int main(int argc, char *argv[]) {
         clReleaseMemObject(device_mem[i]);
         delete[] host_mem[i];
     }
-
     delete[] host_mem;
 
     return 0;
