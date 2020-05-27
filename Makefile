@@ -1,4 +1,4 @@
-objects = main.o printinfo.o cl_rig.o
+objects = main.o printinfo.o cl_rig.o auto_gen.o
 
 CXX = g++
 
