@@ -26,11 +26,14 @@ class AutoGen {
 
     std::string GetKernelName() { return "auto_gen"; }
 
+    std::string GetOpTag() { return tag_; }
+
   private:
     std::string source_code_;
     size_t num_vars_;
     bool good_build_;
     bool use_reduction_;
+    std::string tag_;
 };
 
 #endif  // AUTO_GEN_

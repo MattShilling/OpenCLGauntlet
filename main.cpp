@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <omp.h>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 
 #include "CL/cl.h"
 
@@ -15,7 +17,7 @@
 #define NMB 64
 #endif
 
-#define NUM_ELEMENTS NMB * 1024 * 1024
+#define NUM_ELEMENTS NMB * 1024
 
 #ifndef LOCAL_SIZE
 #define LOCAL_SIZE 64
@@ -51,7 +53,10 @@ int main(int argc, char *argv[]) {
             local_size >= 8,
             "LOCAL_SIZE must be greater or equal to eight (8).");
     }
-    size_t num_elements = nmb * 1024 * 1024;
+
+    // Calculate number of elements to calculate and the
+    // work groups needed.
+    size_t num_elements = nmb * 1024;
     size_t num_work_groups = num_elements / local_size;
 
     // Here we will generate our kernel code from the provided
@@ -70,6 +75,8 @@ int main(int argc, char *argv[]) {
     // terminal or captured output.
     std::cout << "Generated:\n" << ag.GetSourceCode() << "\n"
               << std::endl;
+
+    std::cout << "Op tag = " << ag.GetOpTag() << std::endl;
 
     // Create dynamic memory based on the number of variables
     // needed, which is indicated to us by our KernelBuilder.
@@ -209,6 +216,8 @@ int main(int argc, char *argv[]) {
     CHECK_CL(status, "clEnqueueReadBuffer failed.\n");
     ASSERT(cl.Wait());
 
+    double giga_ops = num_elements / (time1 - time0) / kBillion;
+
     // Check our reduction sum if needed.
     if (ag.UseReduction()) {
         float sum = 0;
@@ -220,11 +229,25 @@ int main(int argc, char *argv[]) {
 
     // Print out the statistics for the run.
     fprintf(stderr,
-            "%8d\t%4d\t%10d\t%10.3lf GigaMultsPerSecond\n",
-            nmb,
+            "%8d\t%4d\t%10d\t%10.3lf Giga(%s)PerSecond\n",
+            num_elements,
             local_size,
             num_work_groups,
-            (double)num_elements / (time1 - time0) / kBillion);
+            giga_ops,
+            ag.GetOpTag().c_str());
+
+    std::string records_file =
+        "records" + ag.GetOpTag() + ".csv";
+    std::cout << "Writing to " << records_file << "..."
+              << std::endl;
+    std::ofstream outfile;
+    outfile.open(records_file, std::ios_base::app);
+    // Setting the precision for output.
+    outfile << std::fixed;
+    outfile << std::setprecision(3);
+    outfile << num_elements << ", " << local_size << ", "
+            << num_work_groups << ", " << giga_ops << std::endl;
+    outfile.close();
 
     // Clean everything up.
     for (auto i = 0; i < num_vars; i++) {

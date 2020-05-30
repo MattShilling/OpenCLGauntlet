@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <iostream>
 
 // OpenCL Vendor IDs:
 #define ID_AMD 0x1002
@@ -23,7 +24,8 @@ void PrintOpenclInfo() {
     if (status != CL_SUCCESS)
         fprintf(stderr, "clGetPlatformIDs failed (1)\n");
 
-    fprintf(stderr, "Number of Platforms = %d\n", numPlatforms);
+    std::cout << "Number of Platforms = " << numPlatforms
+              << std::endl;
 
     cl_platform_id *platforms = new cl_platform_id[numPlatforms];
     status = clGetPlatformIDs(numPlatforms, platforms, NULL);
@@ -244,13 +246,15 @@ void SelectOpenCLDevice(cl_platform_id *platform_,
 
     cl_uint numPlatforms;
     status = clGetPlatformIDs(0, NULL, &numPlatforms);
-    if (status != CL_SUCCESS)
+    if (status != CL_SUCCESS) {
         fprintf(stderr, "clGetPlatformIDs failed (1)\n");
+    }
 
     cl_platform_id *platforms = new cl_platform_id[numPlatforms];
     status = clGetPlatformIDs(numPlatforms, platforms, NULL);
-    if (status != CL_SUCCESS)
+    if (status != CL_SUCCESS) {
         fprintf(stderr, "clGetPlatformIDs failed (2)\n");
+    }
 
     for (int p = 0; p < (int)numPlatforms; p++) {
         // find out how many devices are attached to each
@@ -343,11 +347,10 @@ void SelectOpenCLDevice(cl_platform_id *platform_,
         }
     }
 
-    if (iplatform < 0)
+    if (iplatform < 0) {
         fprintf(stderr, "Found no OpenCL devices!\n");
-    else
-        fprintf(stderr,
-                "Selected Platform #%d, Device #%d\n",
-                iplatform,
-                idevice);
+    } else {
+        std::cout << "Selected Platform #" << iplatform
+                  << ", Device #" << idevice << std::endl;
+    }
 }

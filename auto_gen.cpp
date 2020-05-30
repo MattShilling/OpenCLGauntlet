@@ -22,6 +22,7 @@ AutoGen::AutoGen(std::string build_string) {
         if (build_string[2] == '=') {
             use_reduction_ = true;
             std::cout << "Using Reduction..." << std::endl;
+            tag_ += "_red";
         } else {
             fprintf(stderr, "AutoGen: Did you forget a '='?\n");
             good_build_ = false;
@@ -74,6 +75,7 @@ AutoGen::AutoGen(std::string build_string) {
             s.erase(0, pos + 1);
             op_str += c2s(var) + "[gid] + ";
             prm_str += p_line(c2s(var)) + ",\n";
+            tag_ += "_add";
             var++;
         } else if (s.find("*") < s.find("+")) {
             // Found a multiply operation.
@@ -81,6 +83,7 @@ AutoGen::AutoGen(std::string build_string) {
             s.erase(0, pos + 1);
             op_str += c2s(var) + "[gid] * ";
             prm_str += p_line(c2s(var)) + ",\n";
+            tag_ += "_mult";
             var++;
         }
     }
