@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
 
     size_t data_sz = num_elements * sizeof(float);
 
-    OpenCL cl;
+    ClRig cl;
     ASSERT(cl.Init());
 
     // Allocate the device memory buffers for writing.
@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) {
 
     // Compile and link the kernel code.
     ASSERT(cl.CreateProgram(ag.GetSourceCode()));
-    std::string options = "";
+    std::string options = "-cl-mad-enable";
     ASSERT(cl.BuildProgram(options, ag.GetKernelName()));
 
     // Setup the arguments to the kernel object:
@@ -152,7 +152,7 @@ int main(int argc, char *argv[]) {
     if (ag.UseReduction()) {
         // We need to allocate the local variable in the kernel.
         ASSERT(cl.SetKernelArg(
-            0, LOCAL_SIZE * sizeof(float), nullptr));
+            0, local_size * sizeof(float), nullptr));
         offset++;
     }
     // This for loop will skip the first kernal argument (0) if
@@ -172,30 +172,42 @@ int main(int argc, char *argv[]) {
     cl_int status;
     cl_command_queue cmd_queue;
     cl_kernel kernel;
-    cl.GetCommandQueue(&cmd_queue);
-    cl.GetKernel(&kernel);
+    ASSERT(cl.GetCommandQueue(&cmd_queue));
+    ASSERT(cl.GetKernel(&kernel));
 
-    // Init and start the timer.
-    double time0;
-    time0 = omp_get_wtime();
+    double giga_ops = 0.0;
 
-    // Enqueue the kernel object for execution.
-    status = clEnqueueNDRangeKernel(cmd_queue,
-                                    kernel,
-                                    1,
-                                    NULL,
-                                    globalWorkSize,
-                                    localWorkSize,
-                                    0,
-                                    NULL,
-                                    NULL);
+    for (int i = 0; i < 5; i++) {
 
-    // Check for any failures. Fingers crossed.
-    CHECK_CL(status, "clEnqueueNDRangeKernel failed.\n");
-    ASSERT(cl.Wait());
+        // Init and start the timer.
+        double time0;
+        time0 = omp_get_wtime();
 
-    // Stop timer.
-    double time1 = omp_get_wtime();
+        // Enqueue the kernel object for execution.
+        status = clEnqueueNDRangeKernel(cmd_queue,
+                                        kernel,
+                                        1,
+                                        NULL,
+                                        globalWorkSize,
+                                        localWorkSize,
+                                        0,
+                                        NULL,
+                                        NULL);
+
+        // Check for any failures. Fingers crossed.
+        CHECK_CL(status, "clEnqueueNDRangeKernel failed.\n");
+        ASSERT(cl.Wait());
+
+        // Stop timer.
+        double time1 = omp_get_wtime();
+
+        double giga_ops_new =
+            num_elements / (time1 - time0) / kBillion;
+
+        if (giga_ops_new > giga_ops) {
+            giga_ops = giga_ops_new;
+        }
+    }
 
     // Read the results buffer back from the device to the
     // host.
@@ -215,8 +227,6 @@ int main(int argc, char *argv[]) {
                                  NULL);
     CHECK_CL(status, "clEnqueueReadBuffer failed.\n");
     ASSERT(cl.Wait());
-
-    double giga_ops = num_elements / (time1 - time0) / kBillion;
 
     // Check our reduction sum if needed.
     if (ag.UseReduction()) {

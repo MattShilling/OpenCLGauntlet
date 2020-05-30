@@ -238,8 +238,8 @@ void SelectOpenCLDevice(cl_platform_id *platform_,
     cl_int status;  // returned status from opencl calls
                     // test against CL_SUCCESS
 
-    fprintf(stderr,
-            "\nSelecting the OpenCL Platform and Device:\n");
+    std::cout << "\nSelecting the OpenCL Platform and Device:"
+              << std::endl;
 
     // find out how many platforms are attached here and get
     // their ids:
