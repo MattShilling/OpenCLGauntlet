@@ -31,21 +31,22 @@
         }                                       \
     } while (false);
 
-#define CHECK_CL(X, ...)           \
-    if (X != CL_SUCCESS) {         \
-        fprintf(stderr,            \
-                "[%s:%d] -> %s\n", \
-                __FILE__,          \
-                __LINE__,          \
-                __VA_ARGS__);      \
-        return false;              \
+#define CHECK_CL(X, ...)               \
+    if (X != CL_SUCCESS) {             \
+        fprintf(stderr,                \
+                "[%s:%d][%d] -> %s\n", \
+                __FILE__,              \
+                __LINE__,              \
+                (int)(X),              \
+                __VA_ARGS__);          \
+        return false;                  \
     }
 
-class OpenCL {
+class ClRig {
   public:
-    OpenCL() : initialized_(false) {}
+    ClRig() : initialized_(false) {}
 
-    ~OpenCL() {
+    ~ClRig() {
         clReleaseKernel(kernel_);
         clReleaseProgram(program_);
         clReleaseCommandQueue(cmd_queue_);
@@ -60,7 +61,8 @@ class OpenCL {
                             size_t data_size,
                             const void *ptr);
 
-    // Wait until all queued tasks have taken place:
+    // Wait until all queued tasks have taken
+    // place:
     bool Wait();
 
     // Step 7: Read the kernel code from a file.

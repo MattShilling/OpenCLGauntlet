@@ -5,7 +5,7 @@
 
 #include "printinfo.h"
 
-bool OpenCL::Init() {
+bool ClRig::Init() {
     // Step 1: Get the platform id and the device id.
     SelectOpenCLDevice(&platform_, &device_);
 
@@ -26,7 +26,7 @@ bool OpenCL::Init() {
     return true;
 }
 
-bool OpenCL::AddProgramFile(const char *program_path) {
+bool ClRig::AddProgramFile(const char *program_path) {
     fp_ = fopen(program_path, "r");
     if (fp_ == nullptr) {
         fprintf(stderr,
@@ -37,7 +37,7 @@ bool OpenCL::AddProgramFile(const char *program_path) {
     return true;
 }
 
-bool OpenCL::CreateReadBuffer(cl_mem *mem, size_t data_size) {
+bool ClRig::CreateReadBuffer(cl_mem *mem, size_t data_size) {
     ASSERT(context_ != nullptr);
     ASSERT(mem != nullptr);
     // Step 5: Allocate the device memory buffers.
@@ -49,7 +49,7 @@ bool OpenCL::CreateReadBuffer(cl_mem *mem, size_t data_size) {
     return true;
 }
 
-bool OpenCL::CreateWriteBuffer(cl_mem *mem, size_t data_size) {
+bool ClRig::CreateWriteBuffer(cl_mem *mem, size_t data_size) {
     ASSERT(context_ != nullptr);
     ASSERT(mem != nullptr);
     // Step 5: Allocate the device memory buffers.
@@ -61,7 +61,7 @@ bool OpenCL::CreateWriteBuffer(cl_mem *mem, size_t data_size) {
     return true;
 }
 
-bool OpenCL::EnqueueWriteBuffer(cl_mem d,
+bool ClRig::EnqueueWriteBuffer(cl_mem d,
                                 size_t data_size,
                                 const void *ptr) {
     ASSERT(cmd_queue_ != nullptr);
@@ -82,7 +82,7 @@ bool OpenCL::EnqueueWriteBuffer(cl_mem d,
 }
 
 // Wait until all queued tasks have taken place:
-bool OpenCL::Wait() {
+bool ClRig::Wait() {
     cl_event wait;
 
     // NOTE: clEnqueueMarker() is depreciated.
@@ -97,7 +97,7 @@ bool OpenCL::Wait() {
 }
 
 // Step 7: Read the kernel code from a file.
-bool OpenCL::CreateProgram() {
+bool ClRig::CreateProgram() {
     ASSERT(context_ != nullptr);
 
     fseek(fp_, 0, SEEK_END);
@@ -129,7 +129,7 @@ bool OpenCL::CreateProgram() {
 }
 
 // Step 7: Read the kernel code from a file.
-bool OpenCL::CreateProgram(const std::string &source) {
+bool ClRig::CreateProgram(const std::string &source) {
     ASSERT(context_ != nullptr);
 
     // Create the text for the kernel program.
@@ -143,7 +143,7 @@ bool OpenCL::CreateProgram(const std::string &source) {
     return true;
 }
 
-bool OpenCL::BuildProgram(const std::string &options,
+bool ClRig::BuildProgram(const std::string &options,
                           const std::string &k_name) {
     ASSERT(program_ != nullptr);
     ASSERT(device_ != nullptr);
@@ -178,7 +178,7 @@ bool OpenCL::BuildProgram(const std::string &options,
     return true;
 }
 
-bool OpenCL::SetKernelArg(cl_uint arg_index,
+bool ClRig::SetKernelArg(cl_uint arg_index,
                           size_t arg_size,
                           const void *arg) {
     ASSERT(kernel_ != nullptr);
@@ -189,7 +189,7 @@ bool OpenCL::SetKernelArg(cl_uint arg_index,
     return true;
 }
 
-bool OpenCL::GetCommandQueue(cl_command_queue *cmd_queue) {
+bool ClRig::GetCommandQueue(cl_command_queue *cmd_queue) {
     ASSERT(cmd_queue_ != nullptr);
     ASSERT(cmd_queue != nullptr);
 
@@ -198,7 +198,7 @@ bool OpenCL::GetCommandQueue(cl_command_queue *cmd_queue) {
     return true;
 }
 
-bool OpenCL::GetKernel(cl_kernel *kernel) {
+bool ClRig::GetKernel(cl_kernel *kernel) {
     ASSERT(kernel_ != nullptr);
     ASSERT(kernel != nullptr);
 
