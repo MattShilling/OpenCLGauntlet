@@ -11,5 +11,5 @@ all: $(objects)
 clean:
 	rm -f *.o main
 
-tidy:
+format:
 	clang-format -i *.cpp *.h *.cl
